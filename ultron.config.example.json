@@ -53,7 +53,8 @@
   "voice_stt_keyterms": [
     "ULTRON",
     "WhatsApp",
-    "Spotify"
+    "Spotify",
+    "YouTube"
   ],
   "voice_stt_model_path": null,
   "voice_tts_model_path": null,

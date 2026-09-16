@@ -27,6 +27,7 @@ from .runtime import RuntimeSettings, UltronAssistant
 from .skills import SkillRegistry
 from .voice import VoiceSession, build_voice_session
 from .weather import get_current_weather
+from .youtube import is_youtube_video_id
 
 
 ROOT = resource_root()
@@ -146,6 +147,8 @@ class WebState:
             )
             if conversation_payload.get("route") == "web_search":
                 ui_directive = _research_directive(self.last_task)
+        if ui_directive is None:
+            ui_directive = _youtube_player_directive(self.last_task)
         if ui_directive:
             extra["ui_directive"] = ui_directive
         return self.snapshot(extra)
@@ -726,6 +729,7 @@ def make_handler(state: WebState, web_root: Path = WEB_ROOT) -> type[BaseHTTPReq
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-cache, must-revalidate")
+            self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
             self.end_headers()
             self.wfile.write(data)
 
@@ -887,6 +891,44 @@ def _research_directive(task: dict[str, Any] | None) -> dict[str, Any] | None:
                 "status": str(web.get("status") or "unknown"),
                 "synthesized": bool(web.get("synthesized", False)),
             }
+    return None
+
+
+def _youtube_player_directive(task: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(task, dict):
+        return None
+    for step in task.get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        tool_call = step.get("tool_call")
+        if not isinstance(tool_call, dict) or tool_call.get("name") != "play_youtube_video":
+            continue
+        result = step.get("result")
+        if not isinstance(result, dict) or result.get("status") != "success":
+            continue
+        data = result.get("data")
+        if not isinstance(data, dict) or data.get("playback_target") != "ultron_mini_player":
+            continue
+        video_id = data.get("video_id")
+        if not is_youtube_video_id(video_id):
+            continue
+        candidate_video_ids: list[str] = []
+        raw_candidates = data.get("candidate_video_ids")
+        if isinstance(raw_candidates, list):
+            for candidate in raw_candidates:
+                if is_youtube_video_id(candidate) and candidate not in candidate_video_ids:
+                    candidate_video_ids.append(candidate)
+                if len(candidate_video_ids) >= 6:
+                    break
+        candidate_video_ids = [video_id, *(candidate for candidate in candidate_video_ids if candidate != video_id)][:6]
+        return {
+            "kind": "youtube_player",
+            "action": "cue",
+            "query": str(data.get("query") or "YouTube video")[:240],
+            "video_id": video_id,
+            "video_ids": candidate_video_ids,
+            "autoplay": False,
+        }
     return None
 
 

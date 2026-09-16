@@ -187,7 +187,7 @@ class PipelineTest(unittest.TestCase):
             "open github.com": ToolCall("open_website", {"site": "github.com"}),
             "search YouTube for Python tutorials": ToolCall("open_website", {"site": "youtube", "query": "Python tutorials"}),
             "open YouTube and search for Python tutorials": ToolCall("open_website", {"site": "youtube", "query": "Python tutorials"}),
-            "play a Python tutorial on YouTube": ToolCall("open_website", {"site": "youtube", "query": "a Python tutorial"}),
+            "play a Python tutorial on YouTube": ToolCall("play_youtube_video", {"query": "a Python tutorial"}),
             "open Google and search for weather in Ahmedabad": ToolCall("open_website", {"site": "google", "query": "weather in Ahmedabad"}),
             "what time is it": ToolCall("get_system_status", {"category": "time"}),
             "what is today's date": ToolCall("get_system_status", {"category": "date"}),
@@ -3215,6 +3215,7 @@ class PipelineTest(unittest.TestCase):
     def test_phase8_wake_word_is_removed_from_transcript(self) -> None:
         self.assertEqual(strip_wake_word("ULTRON, create note demo"), "create note demo")
         self.assertEqual(strip_wake_word("hey ultron: open notepad"), "open notepad")
+        self.assertEqual(strip_wake_word("ULTRON play a video on YouTube"), "play a video on YouTube")
 
     def test_phase14_transcript_cleanup_removes_fillers_and_repeats(self) -> None:
         cleaned = clean_transcript("Hey ULTRON, um open open notepad please")

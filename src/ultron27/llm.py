@@ -228,6 +228,7 @@ def build_prompt(utterance: str) -> str:
         '- "unmute the sound" -> {"intent":"unmute_volume","tool_name":"mute_system_volume","tool_arguments":{"mute":false},"confidence":0.96}\n'
         '- "play the next song" -> {"intent":"next_track","tool_name":"next_media_track","tool_arguments":{},"confidence":0.95}\n'
         '- "play blinding lights on Spotify" -> {"intent":"play_music","tool_name":"play_music","tool_arguments":{"query":"blinding lights"},"confidence":0.91}\n'
+        '- "play the Python tutorial on YouTube" -> {"intent":"play_youtube_video","tool_name":"play_youtube_video","tool_arguments":{"query":"the Python tutorial"},"confidence":0.94}\n'
         '- "put on some lofi music" -> {"intent":"play_music","tool_name":"play_music","tool_arguments":{"query":"lofi music"},"confidence":0.78}\n'
         '- "send a WhatsApp message to Mom saying I will be home at seven" -> {"intent":"send_whatsapp_message","tool_name":"send_whatsapp_message","tool_arguments":{"recipient":"Mom","message":"I will be home at seven"},"confidence":0.94}\n'
         '- "write this in notepad" -> {"intent":"clarify_intent","tool_name":"ask_clarification","tool_arguments":{"question":"What text should I write in Notepad?"},"confidence":0.72,"needs_clarification":true}\n'

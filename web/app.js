@@ -88,6 +88,14 @@ const cameraCanvas = document.getElementById("cameraCanvas");
 const cameraCaptureButton = document.getElementById("cameraCaptureButton");
 const cameraStatus = document.getElementById("cameraStatus");
 const cameraPermissionMessage = document.getElementById("cameraPermissionMessage");
+const youtubeWindow = document.getElementById("youtubeWindow");
+let youtubePlayerHost = document.getElementById("youtubePlayerHost");
+const youtubeWindowTitle = document.getElementById("youtubeWindowTitle");
+const youtubePlayerMessage = document.getElementById("youtubePlayerMessage");
+const youtubePlayerStatus = document.getElementById("youtubePlayerStatus");
+const youtubeBackButton = document.getElementById("youtubeBackButton");
+const youtubePlayButton = document.getElementById("youtubePlayButton");
+const youtubeForwardButton = document.getElementById("youtubeForwardButton");
 const objectScanProgress = document.getElementById("objectScanProgress");
 const objectScanLabel = document.getElementById("objectScanLabel");
 const objectScanPercent = document.getElementById("objectScanPercent");
@@ -183,6 +191,14 @@ let modelVisible = true;
 let objectScanSession = 0;
 let objectScanActive = false;
 let windowStack = 30;
+let youtubeIframeApiPromise = null;
+let youtubePlayer = null;
+let youtubePlayerReady = false;
+let youtubePlayerPlaying = false;
+let youtubeRequestedVideoId = "";
+let youtubeCandidateVideoIds = [];
+let youtubeCandidateIndex = 0;
+let youtubePlayerGeneration = 0;
 let currentSpeechResolve = null;
 let currentSpeechAudio = null;
 let currentSpeechUrl = null;
@@ -596,7 +612,7 @@ async function loadStatus() {
 }
 
 function setupWorkspaceWindows() {
-  [cameraWindow, researchWindow, modelWindow].filter(Boolean).forEach((panel) => {
+  [cameraWindow, youtubeWindow, researchWindow, modelWindow].filter(Boolean).forEach((panel) => {
     const handle = panel.querySelector("[data-window-drag-handle]");
     panel.addEventListener("pointerdown", () => bringWindowToFront(panel));
     handle?.addEventListener("pointerdown", (event) => beginWindowDrag(event, panel));
@@ -609,6 +625,9 @@ function setupWorkspaceWindows() {
     });
   });
   cameraCaptureButton?.addEventListener("click", captureCameraFrame);
+  youtubeBackButton?.addEventListener("click", () => seekYouTubeVideo(-10));
+  youtubePlayButton?.addEventListener("click", toggleYouTubePlayback);
+  youtubeForwardButton?.addEventListener("click", () => seekYouTubeVideo(10));
   gestureToggle?.addEventListener("click", () => setGestureControls(!gestureActive));
   gestureSystemToggle?.addEventListener("click", () => setGestureControls(!gestureActive));
   handGuideToggleButton?.addEventListener("click", () => setGestureControls(!gestureActive));
@@ -653,6 +672,10 @@ function setupWorkspaceWindows() {
     handGestureController.dispose();
     photoModeler.dispose();
     stopCameraStream();
+    destroyYouTubePlayer();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) pauseYouTubePlayer("Playback paused while ULTRON is hidden.");
   });
 }
 
@@ -677,10 +700,14 @@ function handleWindowAction(panel, action) {
       if (gestureActive) setGestureControls(false);
       stopCameraStream();
     }
+    if (panel === youtubeWindow) destroyYouTubePlayer();
     return;
   }
   if (action === "minimize") {
     panel.classList.remove("is-maximized");
+    if (panel === youtubeWindow && !panel.classList.contains("is-minimized")) {
+      pauseYouTubePlayer("Playback paused while the mini-player is minimized.");
+    }
     panel.classList.toggle("is-minimized");
     return;
   }
@@ -719,6 +746,10 @@ function beginWindowDrag(event, panel) {
 
 async function handleUiDirective(directive) {
   if (!directive || typeof directive !== "object") return;
+  if (directive.kind === "youtube_player") {
+    await openYouTubePlayer(directive);
+    return;
+  }
   if (directive.kind === "camera") {
     openCameraWindow(Boolean(directive.auto_capture));
     return;
@@ -779,6 +810,353 @@ async function handleUiDirective(directive) {
     openWorkspaceWindow(modelWindow);
     window.requestAnimationFrame(() => photoModeler.resize());
   }
+}
+
+const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+
+async function openYouTubePlayer(directive) {
+  const videoId = String(directive?.video_id || "");
+  if (!YOUTUBE_VIDEO_ID_PATTERN.test(videoId)) {
+    if (youtubePlayerStatus) youtubePlayerStatus.textContent = "Rejected an invalid YouTube video identifier.";
+    return false;
+  }
+
+  const generation = youtubePlayerGeneration;
+  const candidateVideoIds = [videoId, ...(Array.isArray(directive?.video_ids) ? directive.video_ids : [])]
+    .map((candidate) => String(candidate || ""))
+    .filter((candidate, index, values) => YOUTUBE_VIDEO_ID_PATTERN.test(candidate) && values.indexOf(candidate) === index)
+    .slice(0, 6);
+  youtubeCandidateVideoIds = candidateVideoIds;
+  youtubeCandidateIndex = 0;
+  youtubeRequestedVideoId = candidateVideoIds[0];
+  youtubeWindow.dataset.videoId = youtubeRequestedVideoId;
+  youtubeWindowTitle.textContent = String(directive?.query || "YouTube video").slice(0, 240);
+  youtubePlayerMessage.hidden = false;
+  youtubePlayerMessage.textContent = "Preparing the YouTube mini-player.";
+  youtubePlayerStatus.textContent = "Loading YouTube video.";
+  setYouTubeControlsEnabled(false);
+  updateYouTubePlayButton(false);
+  openWorkspaceWindow(youtubeWindow);
+
+  try {
+    const api = await loadYouTubeIframeApi();
+    if (generation !== youtubePlayerGeneration || youtubeWindow.hidden) return false;
+    if (!youtubePlayer) {
+      createYouTubePlayer(api, youtubeRequestedVideoId, generation);
+      return true;
+    }
+    if (youtubePlayerReady) {
+      youtubePlayer.cueVideoById(youtubeRequestedVideoId);
+      youtubePlayerMessage.hidden = true;
+      youtubePlayerStatus.textContent = "Video ready. Press play.";
+      setYouTubeControlsEnabled(true);
+      updateYouTubePlayButton(false);
+    }
+    return true;
+  } catch (error) {
+    if (generation !== youtubePlayerGeneration) return false;
+    youtubePlayerMessage.hidden = false;
+    youtubePlayerMessage.textContent = "YouTube could not load inside ULTRON. Check the connection and try again.";
+    youtubePlayerStatus.textContent = String(error?.message || "YouTube player unavailable.");
+    setYouTubeControlsEnabled(false);
+    return false;
+  }
+}
+
+function loadYouTubeIframeApi() {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (youtubeIframeApiPromise) return youtubeIframeApiPromise;
+
+  youtubeIframeApiPromise = new Promise((resolve, reject) => {
+    let settled = false;
+    let timeout = null;
+    let script = document.querySelector('script[data-ultron-youtube-api]');
+    if (script?.dataset.ultronYoutubeApiState === "failed") {
+      script.remove();
+      script = null;
+    }
+    const previousReady = window.onYouTubeIframeAPIReady;
+    const onScriptError = () => finish(new Error("YouTube player API could not be reached."));
+    const readyHandler = () => {
+      try {
+        if (typeof previousReady === "function") previousReady();
+      } catch {
+        // Another optional API-ready listener must not block this player.
+      }
+      finish();
+    };
+    const finish = (error = null) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) window.clearTimeout(timeout);
+      script?.removeEventListener("error", onScriptError);
+      if (window.onYouTubeIframeAPIReady === readyHandler) {
+        window.onYouTubeIframeAPIReady = previousReady;
+      }
+      if (error) {
+        if (script) script.dataset.ultronYoutubeApiState = "failed";
+        script?.remove();
+        reject(error);
+      } else if (window.YT?.Player) {
+        if (script) script.dataset.ultronYoutubeApiState = "ready";
+        resolve(window.YT);
+      } else {
+        if (script) script.dataset.ultronYoutubeApiState = "failed";
+        script?.remove();
+        reject(new Error("YouTube player API was unavailable."));
+      }
+    };
+
+    window.onYouTubeIframeAPIReady = readyHandler;
+    timeout = window.setTimeout(() => finish(new Error("YouTube player API timed out.")), 12000);
+    if (!script) {
+      script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      script.async = true;
+      script.dataset.ultronYoutubeApi = "true";
+    }
+    script.dataset.ultronYoutubeApiState = "loading";
+    script.addEventListener("error", onScriptError, { once: true });
+    if (!script.isConnected) document.head.append(script);
+  }).catch((error) => {
+    youtubeIframeApiPromise = null;
+    throw error;
+  });
+  return youtubeIframeApiPromise;
+}
+
+function createYouTubePlayer(api, videoId, generation) {
+  try {
+    const embedUrl = new URL(`https://www.youtube.com/embed/${videoId}`);
+    embedUrl.search = new URLSearchParams({
+      autoplay: "0",
+      controls: "1",
+      enablejsapi: "1",
+      iv_load_policy: "3",
+      origin: window.location.origin,
+      playsinline: "1",
+      rel: "0",
+    }).toString();
+    const iframe = document.createElement("iframe");
+    iframe.id = "youtubePlayerFrame";
+    iframe.src = embedUrl.href;
+    iframe.title = `YouTube video: ${youtubeWindowTitle.textContent}`;
+    iframe.allow = "autoplay; encrypted-media; picture-in-picture";
+    iframe.referrerPolicy = "strict-origin-when-cross-origin";
+    iframe.setAttribute("allowfullscreen", "");
+    youtubePlayerHost.replaceChildren(iframe);
+    youtubePlayer = new api.Player(iframe, {
+      events: {
+        onReady: (event) => handleYouTubePlayerReady(event, videoId, generation),
+        onStateChange: (event) => handleYouTubePlayerStateChange(event, generation),
+        onError: (event) => handleYouTubePlayerError(event, generation),
+        onAutoplayBlocked: (event) => {
+          if (!isCurrentYouTubePlayerEvent(event, generation)) return;
+          updateYouTubePlayButton(false);
+          youtubePlayerStatus.textContent = "Autoplay was blocked. Press play to begin.";
+        },
+      },
+    });
+  } catch (error) {
+    youtubePlayer = null;
+    youtubePlayerMessage.hidden = false;
+    youtubePlayerMessage.textContent = "YouTube could not initialize inside ULTRON.";
+    youtubePlayerStatus.textContent = String(error?.message || "YouTube player initialization failed.");
+  }
+}
+
+function handleYouTubePlayerReady(event, initialVideoId, generation) {
+  if (
+    generation !== youtubePlayerGeneration
+    || youtubeWindow.hidden
+    || (youtubePlayer && event?.target !== youtubePlayer)
+  ) {
+    try {
+      event.target.destroy();
+    } catch {
+      // The player may already be gone while the window is closing.
+    }
+    return;
+  }
+  youtubePlayer = event.target;
+  youtubePlayerReady = true;
+  const iframe = youtubePlayer.getIframe?.();
+  if (iframe) {
+    iframe.title = `YouTube video: ${youtubeWindowTitle.textContent}`;
+    iframe.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture");
+    iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+  }
+  if (youtubeRequestedVideoId && youtubeRequestedVideoId !== initialVideoId) {
+    youtubePlayer.cueVideoById(youtubeRequestedVideoId);
+  }
+  youtubePlayerMessage.hidden = true;
+  youtubePlayerStatus.textContent = "Video ready. Press play.";
+  setYouTubeControlsEnabled(true);
+  updateYouTubePlayButton(false);
+}
+
+function isCurrentYouTubePlayerEvent(event, generation) {
+  return generation === youtubePlayerGeneration
+    && !youtubeWindow.hidden
+    && Boolean(youtubePlayer)
+    && event?.target === youtubePlayer;
+}
+
+function handleYouTubePlayerStateChange(event, generation) {
+  if (!isCurrentYouTubePlayerEvent(event, generation)) return;
+  const state = Number(event?.data);
+  if (state === 1) youtubePlayerPlaying = true;
+  if ([-1, 0, 2, 5].includes(state)) youtubePlayerPlaying = false;
+  updateYouTubePlayButton(youtubePlayerPlaying);
+  if ([-1, 0, 1, 2, 3, 5].includes(state) && youtubePlayerMessage) youtubePlayerMessage.hidden = true;
+  if ([1, 2, 3, 5].includes(state)) setYouTubeControlsEnabled(true);
+  if (state === 0) youtubePlayerStatus.textContent = "Video ended.";
+  if (state === 1) youtubePlayerStatus.textContent = "Video playing.";
+  if (state === 2) youtubePlayerStatus.textContent = "Video paused.";
+  if (state === 3) youtubePlayerStatus.textContent = "Video buffering.";
+  if (state === 5) youtubePlayerStatus.textContent = "Video ready. Press play.";
+}
+
+function handleYouTubePlayerError(event, generation) {
+  if (!isCurrentYouTubePlayerEvent(event, generation)) return;
+  const code = Number(event?.data);
+  if ([5, 100, 101, 150].includes(code) && tryNextYouTubeCandidate()) return;
+  const messages = {
+    2: "YouTube rejected this video identifier.",
+    5: "This video could not play in the embedded player.",
+    100: "This YouTube video is unavailable.",
+    101: "The owner does not allow this video to be embedded.",
+    150: "The owner does not allow this video to be embedded.",
+    153: "YouTube could not verify the embedded player's origin.",
+  };
+  youtubePlayerPlaying = false;
+  youtubePlayerMessage.hidden = false;
+  youtubePlayerMessage.textContent = messages[code] || "YouTube could not play this video inside ULTRON.";
+  youtubePlayerStatus.textContent = youtubePlayerMessage.textContent;
+  setYouTubeControlsEnabled(false);
+  updateYouTubePlayButton(false);
+}
+
+function tryNextYouTubeCandidate() {
+  if (!youtubePlayer || !youtubePlayerReady || youtubeCandidateIndex + 1 >= youtubeCandidateVideoIds.length) return false;
+  youtubeCandidateIndex += 1;
+  youtubeRequestedVideoId = youtubeCandidateVideoIds[youtubeCandidateIndex];
+  youtubeWindow.dataset.videoId = youtubeRequestedVideoId;
+  youtubePlayerPlaying = false;
+  youtubePlayerMessage.hidden = false;
+  youtubePlayerMessage.textContent = "That result cannot play here. Trying the next YouTube video.";
+  youtubePlayerStatus.textContent = "Trying another YouTube result.";
+  setYouTubeControlsEnabled(false);
+  updateYouTubePlayButton(false);
+  try {
+    youtubePlayer.cueVideoById(youtubeRequestedVideoId);
+    return true;
+  } catch {
+    return tryNextYouTubeCandidate();
+  }
+}
+
+function toggleYouTubePlayback() {
+  if (!youtubePlayer || !youtubePlayerReady) return;
+  try {
+    const playing = Number(youtubePlayer.getPlayerState?.()) === 1 || youtubePlayerPlaying;
+    if (playing) {
+      youtubePlayer.pauseVideo();
+      youtubePlayerStatus.textContent = "Video paused.";
+    } else {
+      youtubePlayer.playVideo();
+      youtubePlayerStatus.textContent = "Starting video.";
+    }
+    updateYouTubePlayButton(!playing);
+  } catch {
+    youtubePlayerStatus.textContent = "YouTube playback controls are unavailable.";
+  }
+}
+
+function seekYouTubeVideo(deltaSeconds) {
+  if (!youtubePlayer || !youtubePlayerReady) return;
+  try {
+    const current = Math.max(0, Number(youtubePlayer.getCurrentTime?.()) || 0);
+    const duration = Math.max(0, Number(youtubePlayer.getDuration?.()) || 0);
+    const unclamped = current + Number(deltaSeconds || 0);
+    const target = duration > 0 ? Math.min(duration, Math.max(0, unclamped)) : Math.max(0, unclamped);
+    youtubePlayer.seekTo(target, true);
+    youtubePlayerStatus.textContent = deltaSeconds < 0 ? "Skipped back 10 seconds." : "Skipped forward 10 seconds.";
+  } catch {
+    youtubePlayerStatus.textContent = "YouTube seeking is unavailable.";
+  }
+}
+
+function pauseYouTubePlayer(message = "Video paused.") {
+  if (!youtubePlayer || !youtubePlayerReady) return;
+  try {
+    youtubePlayer.pauseVideo();
+  } catch {
+    return;
+  }
+  youtubePlayerPlaying = false;
+  updateYouTubePlayButton(false);
+  youtubePlayerStatus.textContent = message;
+}
+
+function destroyYouTubePlayer() {
+  youtubePlayerGeneration += 1;
+  const player = youtubePlayer;
+  youtubePlayer = null;
+  youtubePlayerReady = false;
+  youtubePlayerPlaying = false;
+  youtubeRequestedVideoId = "";
+  youtubeCandidateVideoIds = [];
+  youtubeCandidateIndex = 0;
+  if (youtubeWindow) delete youtubeWindow.dataset.videoId;
+  if (player) {
+    try {
+      player.stopVideo?.();
+      player.destroy?.();
+    } catch {
+      // Closing the app should remain safe even if the remote player is gone.
+    }
+  }
+  resetYouTubePlayerHost();
+  setYouTubeControlsEnabled(false);
+  updateYouTubePlayButton(false);
+  if (youtubePlayerMessage) {
+    youtubePlayerMessage.hidden = false;
+    youtubePlayerMessage.textContent = "Choose a video with ULTRON.";
+  }
+  if (youtubePlayerStatus) youtubePlayerStatus.textContent = "YouTube player closed.";
+}
+
+function resetYouTubePlayerHost() {
+  if (youtubePlayerHost?.isConnected) {
+    youtubePlayerHost.replaceChildren();
+    return;
+  }
+  const viewport = youtubeWindow?.querySelector(".youtube-viewport");
+  if (!viewport) return;
+  const replacement = document.createElement("div");
+  replacement.id = "youtubePlayerHost";
+  replacement.className = "youtube-player-host";
+  replacement.setAttribute("aria-label", "YouTube video player");
+  viewport.append(replacement);
+  youtubePlayerHost = replacement;
+}
+
+function setYouTubeControlsEnabled(enabled) {
+  [youtubeBackButton, youtubePlayButton, youtubeForwardButton].filter(Boolean).forEach((button) => {
+    button.disabled = !enabled;
+  });
+}
+
+function updateYouTubePlayButton(playing) {
+  if (!youtubePlayButton) return;
+  const state = playing ? "pause" : "play";
+  if (youtubePlayButton.dataset.state === state) return;
+  youtubePlayButton.dataset.state = state;
+  youtubePlayButton.setAttribute("aria-label", playing ? "Pause video" : "Play video");
+  youtubePlayButton.title = playing ? "Pause" : "Play";
+  youtubePlayButton.innerHTML = `<i data-lucide="${state}" aria-hidden="true"></i>`;
+  window.lucide?.createIcons({ attrs: { "aria-hidden": "true" } });
 }
 
 async function openCameraWindow(autoCapture = false) {

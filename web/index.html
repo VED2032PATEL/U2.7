@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#06090b" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <title>ULTRON 2.7</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/ultron-logo.png" />
@@ -427,6 +428,49 @@
             </button>
           </footer>
           <canvas id="cameraCanvas" hidden></canvas>
+        </div>
+      </section>
+
+      <section id="youtubeWindow" class="app-window youtube-window" role="dialog" aria-modal="false" aria-labelledby="youtubeWindowTitle" hidden>
+        <header class="app-window-bar" data-window-drag-handle>
+          <div class="app-window-title">
+            <span class="app-window-icon is-youtube"><i data-lucide="play" aria-hidden="true"></i></span>
+            <div>
+              <span class="section-kicker">In-app playback</span>
+              <strong id="youtubeWindowTitle">YouTube mini-player</strong>
+            </div>
+          </div>
+          <div class="app-window-actions">
+            <button type="button" class="icon-button" data-window-action="minimize" aria-label="Minimize YouTube player" title="Minimize">
+              <i data-lucide="minus" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="icon-button" data-window-action="maximize" aria-label="Maximize YouTube player" title="Maximize">
+              <i data-lucide="maximize-2" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="icon-button" data-window-action="close" aria-label="Close YouTube player" title="Close">
+              <i data-lucide="x" aria-hidden="true"></i>
+            </button>
+          </div>
+        </header>
+        <div class="app-window-body youtube-body">
+          <div class="youtube-viewport">
+            <div id="youtubePlayerHost" class="youtube-player-host" aria-label="YouTube video player"></div>
+          </div>
+          <p id="youtubePlayerMessage" class="youtube-player-message">Choose a video with ULTRON.</p>
+          <footer class="youtube-controls" aria-label="YouTube playback controls">
+            <button id="youtubeBackButton" class="youtube-seek-button" type="button" aria-label="Back 10 seconds" title="Back 10 seconds" disabled>
+              <i data-lucide="rotate-ccw" aria-hidden="true"></i>
+              <span>10</span>
+            </button>
+            <button id="youtubePlayButton" class="youtube-play-button" type="button" aria-label="Play video" title="Play" disabled>
+              <i data-lucide="play" aria-hidden="true"></i>
+            </button>
+            <button id="youtubeForwardButton" class="youtube-seek-button" type="button" aria-label="Forward 10 seconds" title="Forward 10 seconds" disabled>
+              <span>10</span>
+              <i data-lucide="rotate-cw" aria-hidden="true"></i>
+            </button>
+          </footer>
+          <p id="youtubePlayerStatus" class="sr-only" role="status" aria-live="polite">YouTube player idle.</p>
         </div>
       </section>
 

@@ -17,6 +17,7 @@ from typing import Any, Iterable
 
 from .models import ToolCall, ToolResult
 from .spotify import SpotifyWebPlayer
+from .youtube import YouTubeLookupError, normalize_youtube_query, resolve_first_youtube_video, youtube_search_url
 from .windows_executor import (
     WindowsAutomationAdapter,
     is_windows,
@@ -344,6 +345,56 @@ class Executor:
         if opened.status == "success":
             return opened
         return _open_url(spotify_url, f"Opened Spotify web search for: {query}", {"query": query, "url": spotify_url})
+
+    def _handle_play_youtube_video(self, call: ToolCall) -> ToolResult:
+        raw_query = call.arguments["query"]
+        if not isinstance(raw_query, str):
+            return ToolResult("blocked", "YouTube playback query must be text.", data={"query": raw_query})
+        query = raw_query
+        try:
+            normalized = normalize_youtube_query(query)
+            search_url = youtube_search_url(normalized)
+        except ValueError as exc:
+            return ToolResult("blocked", str(exc), data={"query": query})
+        if self.dry_run:
+            return ToolResult(
+                "dry_run",
+                f"Would resolve and load in ULTRON's YouTube mini-player: {normalized}",
+                data={
+                    "query": normalized,
+                    "search_url": search_url,
+                    "playback_target": "ultron_mini_player",
+                    "playback_requested": False,
+                    "playback_verified": False,
+                },
+            )
+        try:
+            video = resolve_first_youtube_video(normalized)
+        except YouTubeLookupError as exc:
+            return ToolResult(
+                "error",
+                f"Could not find a playable YouTube result for {normalized}: {exc}",
+                data={
+                    "query": normalized,
+                    "search_url": search_url,
+                    "playback_target": "ultron_mini_player",
+                    "playback_requested": False,
+                    "playback_verified": False,
+                },
+            )
+        return ToolResult(
+            "success",
+            f"Loaded YouTube in ULTRON's mini-player: {normalized}",
+            data={
+                "provider": "youtube",
+                "query": normalized,
+                "video_id": video.video_id,
+                "candidate_video_ids": list(video.candidate_ids or (video.video_id,)),
+                "playback_target": "ultron_mini_player",
+                "playback_requested": True,
+                "playback_verified": False,
+            },
+        )
 
     def _handle_send_whatsapp_message(self, call: ToolCall) -> ToolResult:
         recipient = str(call.arguments["recipient"]).strip()

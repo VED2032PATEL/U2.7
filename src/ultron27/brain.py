@@ -352,6 +352,8 @@ def _friendly_step_result(step: TaskStep) -> str:
         return _would(status, f"searched the web for {arguments.get('query', 'your query')}", message)
     if tool == "play_music":
         return _would(status, f"opened Spotify for {arguments.get('query', 'your music')}", message)
+    if tool == "play_youtube_video":
+        return _would(status, f"loaded {arguments.get('query', 'your video')} in ULTRON's YouTube mini-player", message)
     if tool == "create_note":
         return _would(status, f"created the note {arguments.get('title', 'untitled')}", message)
     if tool == "append_to_note":

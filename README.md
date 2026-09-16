@@ -27,6 +27,7 @@ The repo is built around the supplied research paper and synthetic laptop-comman
 - Voice provider layer with Deepgram Nova-3 STT, Aura-2 neural TTS, faster-whisper, whisper.cpp, Piper, and Windows/browser fallbacks.
 - Wake-word and voice activity gates for always-listening mode, with push-to-talk still available.
 - Backend microphone capture abstraction with sounddevice/mock/browser capture providers and voice diagnostics.
+- YouTube playback that resolves the first matching video and loads it in a draggable ULTRON mini-player.
 - Semantic LLM intent routing through Ollama or Groq, with strict typed JSON validation and clarification fallback.
 - Windows automation executor pack with app aliases, safe-root file enforcement, confirmation modal support, and audit viewing.
 - Skill registry and local knowledge base for reusable safe capabilities and document-grounded project context.
@@ -131,6 +132,7 @@ increase brightness by 20 percent
 pause the music
 play the next song
 search YouTube for Python tutorials
+play Interstellar trailer on YouTube
 find PDF files in Downloads
 create a folder called invoices in Documents
 rename report.txt to final_report.txt
@@ -346,8 +348,11 @@ Phase 2 adds real execution for low-risk tools while keeping destructive command
 - `open_application` uses configurable `app_aliases`.
 - `search_web` opens a browser search URL through a typed low-risk tool.
 - `play_music` opens Spotify search through a typed low-risk tool.
+- `play_youtube_video` resolves the first matching YouTube video and hands it to ULTRON's in-app mini-player.
 - `copy_to_clipboard` and `read_clipboard` use Windows clipboard commands when available.
 - `take_screenshot` saves under `screenshot_dir` when Pillow/ImageGrab is available.
+
+The floating YouTube player stays inside the desktop interface and adds prominent Play/Pause, Back 10 seconds, and Forward 10 seconds buttons beneath the video. Playback pauses when the player or ULTRON is minimized and stops when the player is closed.
 
 Use dry-run previews first:
 

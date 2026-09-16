@@ -248,7 +248,7 @@ class FastIntentRouter:
         if normalized in {"who are you", "what are you"}:
             return "I am ULTRON 2.7, sir, your local assistant for chat, planning, voice, and safe laptop tasks."
         if re.search(r"\b(what can you do|help|commands)\b", lowered):
-            return "I can chat; control apps, sound, brightness, and media; use Spotify and WhatsApp; open websites; calculate; report local system status; organize approved files and folders; create notes, reminders, timers, screenshots, and email drafts; use the clipboard; and search your files or the web, sir."
+            return "I can chat; control apps, sound, brightness, and media; use Spotify and WhatsApp; play YouTube videos in an in-app mini-player; open websites; calculate; report local system status; organize approved files and folders; create notes, reminders, timers, screenshots, and email drafts; use the clipboard; and search your files or the web, sir."
         return ""
 
     def _local_command(self, text: str) -> bool:

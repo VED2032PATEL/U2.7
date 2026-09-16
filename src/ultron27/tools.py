@@ -31,6 +31,12 @@ TOOL_SPECS: dict[str, ToolSpec] = {
     "open_website": ToolSpec("open_website", "Open a validated website or site search in the default browser.", RiskLevel.LOW, ("site",), ("query",)),
     "pause_media": ToolSpec("pause_media", "Pause media playback.", RiskLevel.LOW, ("action",)),
     "play_music": ToolSpec("play_music", "Play music for a query.", RiskLevel.LOW, ("query",)),
+    "play_youtube_video": ToolSpec(
+        "play_youtube_video",
+        "Resolve and load a YouTube video in ULTRON's in-app mini-player.",
+        RiskLevel.LOW,
+        ("query",),
+    ),
     "previous_media_track": ToolSpec("previous_media_track", "Go to the previous media track.", RiskLevel.LOW),
     "read_clipboard": ToolSpec("read_clipboard", "Read text from the system clipboard.", RiskLevel.LOW),
     "rename_file": ToolSpec("rename_file", "Rename a file after confirmation.", RiskLevel.MEDIUM, ("old_name", "new_name"), requires_confirmation=True),

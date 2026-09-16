@@ -33,6 +33,7 @@ _REGEX_PRIORITY_TOOLS = {
     "open_terminal",
     "open_website",
     "pause_media",
+    "play_youtube_video",
     "previous_media_track",
     "rename_file",
     "search_files",
@@ -693,29 +694,35 @@ _WEBSITE_ALIASES = {
 
 
 def _website_plan(utterance: str) -> Plan | None:
-    value = " ".join(utterance.strip().split())
+    value = " ".join(utterance.strip().split()).rstrip(" .!?")
     site_pattern = "|".join(re.escape(site) for site in sorted(_WEBSITE_ALIASES, key=len, reverse=True))
     compound = re.match(
         rf"^(?:please\s+)?(?:open|visit|go\s+to|launch)\s+(?:the\s+)?(?P<site>{site_pattern})\s+"
-        r"(?:and\s+then|then|and)\s+(?:search(?:\s+for)?|look\s+up|find|play|watch)\s+(?P<query>.+)$",
+        r"(?:and\s+then|then|and)\s+(?P<action>search(?:\s+for)?|look\s+up|find|play|watch)\s+(?P<query>.+)$",
         value,
         flags=re.IGNORECASE,
     )
     if compound:
         site = _WEBSITE_ALIASES[compound.group("site").lower()]
-        query = _strip_wrapping_quotes(compound.group("query").strip())
+        action = compound.group("action").lower()
+        raw_query = compound.group("query").strip()
+        if site == "youtube" and action in {"play", "watch"}:
+            raw_query = re.sub(r"[\s,]+please$", "", raw_query, flags=re.IGNORECASE)
+        query = _strip_wrapping_quotes(raw_query)
         if query:
+            if site == "youtube" and action in {"play", "watch"}:
+                return _plan_from_tool(utterance, "play_youtube_video", "play_youtube_video", {"query": query}, "regex", 0.94)
             return _plan_from_tool(utterance, "open_website", "open_website", {"site": site, "query": query}, "regex", 0.91)
 
     youtube_play = re.match(
-        r"^(?:please\s+)?(?:play|watch)\s+(?P<query>.+?)\s+(?:on|in)\s+youtube$",
+        r"^(?:please\s+)?(?:play|watch)\s+(?P<query>.+?)\s+(?:on|in|from|through)\s+youtube(?:[\s,]+please)?$",
         value,
         flags=re.IGNORECASE,
     )
     if youtube_play:
         query = _strip_wrapping_quotes(youtube_play.group("query").strip())
         if query:
-            return _plan_from_tool(utterance, "open_website", "open_website", {"site": "youtube", "query": query}, "regex", 0.88)
+            return _plan_from_tool(utterance, "play_youtube_video", "play_youtube_video", {"query": query}, "regex", 0.94)
 
     search_patterns = (
         rf"^(?:please\s+)?(?:search|look\s+up|find)\s+(?:on\s+)?(?P<site>{site_pattern})\s+(?:for\s+)?(?P<query>.+)$",

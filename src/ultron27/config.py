@@ -43,7 +43,7 @@ class UltronConfig:
     voice_stt_model: str | None = None
     voice_tts_model: str | None = "aura-2-orion-en"
     voice_stt_language: str = "multi"
-    voice_stt_keyterms: tuple[str, ...] = ("ULTRON", "WhatsApp", "Spotify")
+    voice_stt_keyterms: tuple[str, ...] = ("ULTRON", "WhatsApp", "Spotify", "YouTube")
     voice_stt_model_path: Path | None = None
     voice_tts_model_path: Path | None = None
     voice_tts_voice_path: Path | None = None

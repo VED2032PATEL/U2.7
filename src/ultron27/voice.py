@@ -118,7 +118,7 @@ def _voice_keyterms(config: Any) -> tuple[str, ...]:
         configured = tuple(item.strip() for item in configured.split(";") if item.strip())
     contacts = getattr(config, "whatsapp_contacts", None) or {}
     contact_names = contacts.keys() if isinstance(contacts, dict) else ()
-    builtins = ("ULTRON", "WhatsApp", "Spotify", "Groq", "Deepgram", "Notepad")
+    builtins = ("ULTRON", "WhatsApp", "Spotify", "YouTube", "Groq", "Deepgram", "Notepad")
     return _dedupe_keyterms((*builtins, *configured, *contact_names))
 
 
@@ -1419,6 +1419,7 @@ def clean_transcript(text: str, *, keyterms: Iterable[str] = ()) -> str:
 
 def _restore_keyterms(text: str, keyterms: Iterable[str]) -> str:
     value = re.sub(r"\bwhats\s+app\b", "WhatsApp", text, flags=re.IGNORECASE)
+    value = re.sub(r"\byou\s+tube\b", "YouTube", value, flags=re.IGNORECASE)
     words = value.split()
     for term in sorted(_dedupe_keyterms(keyterms), key=lambda item: len(item.split()), reverse=True):
         canonical_words = term.split()
@@ -1448,7 +1449,7 @@ def _speech_token(value: str) -> str:
 
 def strip_wake_word(text: str) -> str:
     value = " ".join(text.strip().split())
-    value = re.sub(r"^(?:hey\s+)?ultron[\s,.:;-]+", "", value, flags=re.IGNORECASE)
+    value = re.sub(r"^(?:hey\s+)?ultron\b[\s,.:;-]+(?=\S)", "", value, flags=re.IGNORECASE)
     return value.strip()
 
 
