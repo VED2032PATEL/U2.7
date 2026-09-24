@@ -23,6 +23,7 @@ from .conversation import ConversationManager
 from .diagnostics import PHASE13_VERSION, build_diagnostics
 from .knowledge import KnowledgeBase
 from .modeling import generate_model_scene
+from .missions import MissionManager
 from .runtime import RuntimeSettings, UltronAssistant
 from .skills import SkillRegistry
 from .voice import VoiceSession, build_voice_session
@@ -69,9 +70,11 @@ class WebState:
     speech_barge_in_enabled: bool = True
     _briefing_cache: dict[str, Any] | None = field(default=None, init=False, repr=False)
     _briefing_cached_at: float = field(default=0.0, init=False, repr=False)
+    missions: MissionManager = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         settings = self.brain.assistant.settings
+        self.missions = MissionManager(self.brain.assistant)
         if self.conversation is None:
             self.conversation = ConversationManager(self.brain)
         if self.knowledge is None:
@@ -99,6 +102,17 @@ class WebState:
             return self.snapshot({"status": "empty", "message": self.last_subtitle})
 
         lowered = command.lower()
+        if lowered.startswith("/agent "):
+            try:
+                mission = self.missions.create(command[7:].strip())
+            except ValueError as exc:
+                self.visual_state = "idle"
+                self.last_subtitle = str(exc)
+                return self.snapshot({"status": "error", "message": str(exc), "subtitle": str(exc)})
+            self.visual_state = "idle"
+            self.last_subtitle = "Your agent task is ready to review, sir."
+            return self.snapshot({"status": "ok", "subtitle": self.last_subtitle,
+                                  "ui_directive": {"kind": "agent", "id": mission["id"]}})
         interface_request = _interface_request(command) if mode != "plan" and not lowered.startswith("/plan ") else None
         ui_directive = None
         if interface_request is not None:
@@ -517,6 +531,11 @@ def make_handler(state: WebState, web_root: Path = WEB_ROOT) -> type[BaseHTTPReq
     class Handler(BaseHTTPRequestHandler):
         server_version = PHASE13_VERSION
 
+        @staticmethod
+        def shutdown_agent() -> None:
+            if getattr(state, "missions", None) is not None:
+                state.missions.shutdown()
+
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             if parsed.path == "/favicon.ico":
@@ -525,6 +544,13 @@ def make_handler(state: WebState, web_root: Path = WEB_ROOT) -> type[BaseHTTPReq
                 return
             if parsed.path == "/api/status":
                 self._json(state.snapshot({"status": "ok"}))
+                return
+            if parsed.path == "/api/agent":
+                selected = (parse_qs(parsed.query).get("id") or [""])[0]
+                try:
+                    self._json(state.missions.snapshot(selected))
+                except ValueError as exc:
+                    self._json({"status": "error", "message": str(exc)}, status=404)
                 return
             if parsed.path == "/api/diagnostics":
                 self._json(state.diagnostics())
@@ -573,7 +599,15 @@ def make_handler(state: WebState, web_root: Path = WEB_ROOT) -> type[BaseHTTPReq
 
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if parsed.path.startswith("/api/agent/"):
+                origin = self.headers.get("Origin")
+                if (origin and urlparse(origin).netloc != self.headers.get("Host")) or self.headers.get_content_type() != "application/json":
+                    self._json({"status": "error", "message": "Agent requests must originate from this ULTRON interface."}, status=403)
+                    return
             body = self._read_json()
+            if parsed.path.startswith("/api/agent/"):
+                self._agent_request(parsed.path, body)
+                return
             if parsed.path == "/api/command":
                 self._json(state.command(str(body.get("command", "")), confirmed=bool(body.get("confirmed", False)), mode=str(body.get("mode", "do"))))
                 return
@@ -646,6 +680,33 @@ def make_handler(state: WebState, web_root: Path = WEB_ROOT) -> type[BaseHTTPReq
                 self._json(state.set_visual_state(str(body.get("state", ""))))
                 return
             self._json({"status": "not_found", "message": "Unknown API route."}, status=404)
+
+        def _agent_request(self, path: str, body: dict[str, Any]) -> None:
+            manager = state.missions
+            identifier = str(body.get("id", ""))
+            try:
+                if path == "/api/agent/plan":
+                    task = manager.create(str(body.get("goal", "")))
+                elif path == "/api/agent/control":
+                    action = str(body.get("action", ""))
+                    if action in {"start", "resume", "approve"}:
+                        task = manager.start(identifier, confirmed=action == "approve")
+                    else:
+                        task = manager.control(identifier, action)
+                elif path == "/api/agent/routines/save":
+                    manager.save_routine(identifier, str(body.get("name", "")))
+                    task = manager.store.get(identifier)
+                elif path == "/api/agent/routines/plan":
+                    task = manager.plan_routine(identifier)
+                elif path == "/api/agent/routines/delete":
+                    manager.store.delete_routine(identifier)
+                    task = None
+                else:
+                    self._json({"status": "error", "message": "Unknown agent route."}, status=404)
+                    return
+                self._json(manager.snapshot(task["id"] if task else ""))
+            except ValueError as exc:
+                self._json({"status": "error", "message": str(exc)}, status=400)
 
         def log_message(self, format: str, *args: object) -> None:
             return
@@ -971,6 +1032,7 @@ def main(argv: list[str] | None = None) -> None:
     except KeyboardInterrupt:
         print("Shutting down ULTRON interface.")
     finally:
+        state.missions.shutdown()
         server.server_close()
 
 

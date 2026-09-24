@@ -44,6 +44,7 @@ TOOL_SPECS: dict[str, ToolSpec] = {
     "run_script": ToolSpec("run_script", "Run a preapproved local script.", RiskLevel.HIGH, ("script_name",), requires_confirmation=True),
     "search_files": ToolSpec("search_files", "Search local files.", RiskLevel.LOW, ("query",), ("file_type", "folder")),
     "search_web": ToolSpec("search_web", "Search the web.", RiskLevel.LOW, ("query",)),
+    "research_topic": ToolSpec("research_topic", "Gather web evidence and source links about a topic.", RiskLevel.LOW, ("query",)),
     "send_email": ToolSpec("send_email", "Send an email after confirmation.", RiskLevel.HIGH, ("recipient", "message"), requires_confirmation=True),
     "send_whatsapp_message": ToolSpec(
         "send_whatsapp_message",

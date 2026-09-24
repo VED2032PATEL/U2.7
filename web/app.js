@@ -1,9 +1,11 @@
 import * as THREE from "./vendor/three.module.min.js";
 import { createArmillaryCore } from "./ultron-core.js";
+import { createCoreActivityController } from "./core-activity.js";
 import { createHandGestureController } from "./hand-gestures.js";
 import { createDesktopGestureInterpreter } from "./hand-mouse.js";
 import { createPhotoReliefModeler } from "./photo-modeler.js";
 import { createObjectScanner } from "./object-scanner.js";
+import { createAgentWorkspace } from "./agent-workspace.js";
 
 const canvas = document.getElementById("ultron-scene");
 const subtitlePanel = document.getElementById("subtitlePanel");
@@ -337,7 +339,12 @@ root.visible = false;
 particles.visible = false;
 fill.intensity = 0;
 const armillaryCore = createArmillaryCore({ scene, camera, renderer });
+const coreActivity = createCoreActivityController(armillaryCore);
 
+const agentWorkspace = createAgentWorkspace({
+  onOpen: () => { setDetailsCollapsed(false); selectDrawerTab("agent"); },
+  activity: coreActivity,
+});
 window.lucide?.createIcons({ attrs: { "aria-hidden": "true" } });
 setVisualState("idle", { sync: false });
 setDetailsCollapsed(detailsCollapsed);
@@ -746,6 +753,10 @@ function beginWindowDrag(event, panel) {
 
 async function handleUiDirective(directive) {
   if (!directive || typeof directive !== "object") return;
+  if (directive.kind === "agent") {
+    await agentWorkspace.open(directive.id);
+    return;
+  }
   if (directive.kind === "youtube_player") {
     await openYouTubePlayer(directive);
     return;
@@ -3086,12 +3097,16 @@ async function fetchJson(url) {
 }
 
 async function postJson(url, payload) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  return response.json();
+  return coreActivity.run(url, async () => {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || "ULTRON request failed.");
+    return result;
+  }, payload);
 }
 
 function escapeHtml(value) {

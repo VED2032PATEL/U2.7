@@ -217,7 +217,7 @@ class UltronBrain:
             return TaskState.WAITING_FOR_CONFIRMATION
         if policy_action == "block" or result_status == "blocked":
             return TaskState.BLOCKED
-        if result_status in {"error", "not_implemented", "not_found"}:
+        if result_status not in {"success", "dry_run"}:
             return TaskState.FAILED
         return TaskState.COMPLETED
 

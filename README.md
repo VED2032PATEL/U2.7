@@ -19,10 +19,12 @@ The repo is built around the supplied research paper and synthetic laptop-comman
 - Optional LLM planner adapter with Ollama or Groq support, strict JSON parsing, schema validation, and safe fallback behavior.
 - Interactive assistant console for repeated commands, confirmations, and JSON inspection.
 - Agentic brain layer for multi-step task planning, safe execution, and non-sensitive memory.
+- Durable Agent Tasks with reviewed plans, step-to-step results, live progress, pause/resume/cancel, bounded read retries, artifact verification, and reusable routines.
 - Conversation manager with fast chat routing, clarification behavior, and a consistent calm assistant personality.
 - Optional PyTorch neural intent-router training path using the 50,000-example ULTRON synthetic dataset.
 - Native Windows desktop application with a persistent WebView2 profile, backed by the local brain/runtime API.
 - Browser-hosted development interface using the same cyberpunk green command center.
+- Reactive 3D aperture core with distinct voice/activity animations, task progress, reduced-motion support, and a backup-first [desktop visual updater](docs/reactive-core.md).
 - Voice mode with transcript cleanup, confidence handling, speech synthesis, transcript history, mute, push-to-talk, and confirmation controls.
 - Voice provider layer with Deepgram Nova-3 STT, Aura-2 neural TTS, faster-whisper, whisper.cpp, Piper, and Windows/browser fallbacks.
 - Wake-word and voice activity gates for always-listening mode, with push-to-talk still available.
@@ -82,6 +84,31 @@ python scripts/demo_phase13.py
 python scripts/verify_phase13.py
 python -m unittest discover -s tests
 ```
+
+## Agent Tasks
+
+Open the **Tasks** tab in Operations. Enter a goal, choose **Plan task**, review the steps, then choose **Run plan**. The usual execution mode and tool permissions still apply. The mode badge distinguishes live actions from simulation.
+
+Examples:
+
+```text
+Research solar energy then save it as a note called Energy brief
+Open notepad then set volume to 30 percent
+Save my clipboard as a note called Quick capture
+```
+
+The normal command input also accepts `/agent <goal>` to open a plan in Tasks. Explicit `then` sequences, research-to-note, and clipboard-to-note plans work locally. More open-ended goal planning and research synthesis use the configured Groq provider. Without synthesis, research results are clearly labeled as source excerpts.
+
+- Plans and results persist in `.ultron/missions.sqlite3`, including completed steps and waiting confirmations.
+- Pause and cancel take effect after the active tool returns. Resume starts at the first unfinished step.
+- Each approval covers only the waiting step, including its resolved arguments. Existing WhatsApp auto-confirm settings remain respected.
+- Read operations retry once on a transient connection/timeout error. Writes and messages are never automatically replayed after an uncertain outcome.
+- Notes and folders are checked on disk. Other tools are labeled as reporting success unless an independent check exists.
+- A restart marks in-flight tasks as interrupted. Read steps can be retried; uncertain writes require inspecting the result and planning only the remaining work.
+- Saving a routine stores its reviewed instructions and output references, not its old results or approvals. Reopening a routine produces a fresh preview.
+- A plan made in simulation cannot later be resumed as a live plan. Replan after changing execution mode.
+
+See [the agent task design and API](docs/agent-tasks.md) for integration details and limitations. The ordinary command, conversation, and voice routes remain available alongside Tasks.
 
 ## Desktop Application
 

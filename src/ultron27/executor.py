@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .models import ToolCall, ToolResult
+from .internet import search_web
 from .spotify import SpotifyWebPlayer
 from .youtube import YouTubeLookupError, normalize_youtube_query, resolve_first_youtube_video, youtube_search_url
 from .windows_executor import (
@@ -244,7 +245,7 @@ class Executor:
         if self.dry_run:
             return ToolResult("dry_run", f"Would create note: {note_path.name}", data={"path": str(note_path), "content": content})
         note_path.parent.mkdir(parents=True, exist_ok=True)
-        note_path.write_text(content + os.linesep, encoding="utf-8")
+        note_path.write_text(content + "\n", encoding="utf-8", newline="")
         return ToolResult("success", f"Created note: {note_path.name}", changed={"path": str(note_path)})
 
     def _handle_append_to_note(self, call: ToolCall) -> ToolResult:
@@ -254,8 +255,8 @@ class Executor:
         if self.dry_run:
             return ToolResult("dry_run", f"Would append to note: {note_path.name}", data={"path": str(note_path), "content": content})
         note_path.parent.mkdir(parents=True, exist_ok=True)
-        with note_path.open("a", encoding="utf-8") as handle:
-            handle.write(content + os.linesep)
+        with note_path.open("a", encoding="utf-8", newline="") as handle:
+            handle.write(content + "\n")
         return ToolResult("success", f"Updated note: {note_path.name}", changed={"path": str(note_path)})
 
     def _handle_set_reminder(self, call: ToolCall) -> ToolResult:
@@ -306,6 +307,13 @@ class Executor:
 
             handle.write(json.dumps(timer, ensure_ascii=False, sort_keys=True) + "\n")
         return ToolResult("success", f"Timer started for {timer['duration']}.", changed={"path": str(path), **timer})
+
+    def _handle_research_topic(self, call: ToolCall) -> ToolResult:
+        query = str(call.arguments["query"]).strip()
+        if self.dry_run:
+            return ToolResult("dry_run", f"Would research: {query}", data={"query": query})
+        web = search_web(query, limit=5)
+        return ToolResult(web.status, web.answer, data=web.to_dict())
 
     def _handle_search_web(self, call: ToolCall) -> ToolResult:
         query = str(call.arguments["query"]).strip()

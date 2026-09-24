@@ -56,6 +56,9 @@ class DesktopBackend:
             if self._stopped:
                 return
             self._stopped = True
+        stop_agent = getattr(self.server.RequestHandlerClass, "shutdown_agent", None)
+        if stop_agent:
+            stop_agent()
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=5)

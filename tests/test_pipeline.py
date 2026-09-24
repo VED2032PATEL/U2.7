@@ -12,8 +12,10 @@ import urllib.parse
 from contextlib import redirect_stdout
 from dataclasses import replace
 from http.server import ThreadingHTTPServer
+from importlib.machinery import ModuleSpec
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 from urllib.request import Request, urlopen
 
 from ultron27.audit import append_audit_record, read_recent_audit_records
@@ -772,10 +774,11 @@ class PipelineTest(unittest.TestCase):
                 self.mute = value
 
         volume = FakeVolume()
+        set_brightness = Mock()
+        brightness = SimpleNamespace(get_brightness=Mock(return_value=[37]), set_brightness=set_brightness)
         with (
             patch("ultron27.windows_executor._windows_endpoint_volume", return_value=volume),
-            patch("screen_brightness_control.get_brightness", return_value=[37]),
-            patch("screen_brightness_control.set_brightness") as set_brightness,
+            patch.dict("sys.modules", {"screen_brightness_control": brightness}),
             patch("ultron27.windows_executor._tap_key") as tap_key,
         ):
             volume_result = executor.execute(ToolCall("adjust_system_volume", {"direction": "down", "delta": 15}))
@@ -1855,10 +1858,13 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("exportOBJ", Path("web/photo-modeler.js").read_text(encoding="utf-8"))
         self.assertIn("ObjectDetector", Path("web/object-scanner.js").read_text(encoding="utf-8"))
         self.assertIn("body.details-collapsed .detail-panel", styles)
-        self.assertIn("makeNeuralLattice", core)
-        self.assertIn("makeOrbitSystem", core)
+        self.assertIn("makeLens", core)
+        self.assertIn("makeFibers", core)
         self.assertIn("THREE.InstancedMesh", core)
-        self.assertIn("STATE_COLORS", core)
+        self.assertIn('dataset.coreDesign = "aperture-v2"', core)
+        self.assertIn("createCoreActivityController", app)
+        self.assertIn("setActivity(value", core)
+        self.assertIn("prefers-reduced-motion: reduce", core)
 
     def test_opening_sequence_stages_core_and_interface_reveal(self) -> None:
         app = Path("web/app.js").read_text(encoding="utf-8")
@@ -1871,7 +1877,7 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("runOpeningSequence", app)
         self.assertIn("await openingSequencePromise", app)
         self.assertIn("startBoot()", core)
-        self.assertIn("setBootProgress(progress)", core)
+        self.assertIn("setBootProgress(", core)
         self.assertIn("body.app-booting", styles)
         self.assertIn("@keyframes boot-drawer-in", styles)
         self.assertIn("@media (prefers-reduced-motion: reduce)", styles)
@@ -2340,9 +2346,9 @@ class PipelineTest(unittest.TestCase):
                 return b"\x00\x00" * 8000
 
         capture = SoundDeviceMicrophoneCapture(sample_rate=16000, default_seconds=0.55)
+        audio_device = SimpleNamespace(rec=Mock(return_value=FakeAudio()), wait=Mock(), __spec__=ModuleSpec("sounddevice", loader=None))
         with (
-            patch("sounddevice.rec", return_value=FakeAudio()),
-            patch("sounddevice.wait"),
+            patch.dict("sys.modules", {"sounddevice": audio_device}),
             patch("ultron27.voice.tempfile.NamedTemporaryFile") as temporary_file,
         ):
             payload = capture.capture({"seconds": 0.55, "energy_only": True})

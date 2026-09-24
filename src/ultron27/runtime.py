@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -79,6 +80,7 @@ class UltronAssistant:
         if not settings.dataset_path.exists():
             raise FileNotFoundError(f"Dataset file not found: {settings.dataset_path}")
         self.settings = settings
+        self.execution_lock = threading.RLock()
         self.planner = DatasetPlanner.from_jsonl(settings.dataset_path)
 
     def handle(self, utterance: str, *, confirmed: bool = False) -> dict[str, Any]:
@@ -160,7 +162,8 @@ class UltronAssistant:
             whatsapp_contacts=self.settings.whatsapp_contacts or {},
         )
         if decision.action == "allow":
-            result = executor.execute(plan.tool_call)
+            with self.execution_lock:
+                result = executor.execute(plan.tool_call)
         elif decision.action == "confirm":
             result = {
                 "status": "confirmation_required",
