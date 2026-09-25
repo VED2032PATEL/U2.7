@@ -605,6 +605,16 @@ def make_handler(state: WebState, web_root: Path = WEB_ROOT) -> type[BaseHTTPReq
                     self._json({"status": "error", "message": "Agent requests must originate from this ULTRON interface."}, status=403)
                     return
             body = self._read_json()
+            from .personality import persona_scope
+
+            persona = body.get("persona", "standard")
+            if not isinstance(persona, str) or persona not in {"standard", "crimson"}:
+                self._json({"status": "error", "message": "Unknown presentation persona."}, status=400)
+                return
+            with persona_scope(persona):
+                self._dispatch_post(parsed, body)
+
+        def _dispatch_post(self, parsed: Any, body: dict[str, Any]) -> None:
             if parsed.path.startswith("/api/agent/"):
                 self._agent_request(parsed.path, body)
                 return

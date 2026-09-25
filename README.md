@@ -25,6 +25,7 @@ The repo is built around the supplied research paper and synthetic laptop-comman
 - Native Windows desktop application with a persistent WebView2 profile, backed by the local brain/runtime API.
 - Browser-hosted development interface using the same cyberpunk green command center.
 - Reactive 3D aperture core with distinct voice/activity animations, task progress, reduced-motion support, and a backup-first [desktop visual updater](docs/reactive-core.md).
+- Optional [Crimson cinematic persona](docs/crimson-mode.md): core-first color takeover, stronger activity reactions, and a commanding Groq conversation style with unchanged execution permissions.
 - Voice mode with transcript cleanup, confidence handling, speech synthesis, transcript history, mute, push-to-talk, and confirmation controls.
 - Voice provider layer with Deepgram Nova-3 STT, Aura-2 neural TTS, faster-whisper, whisper.cpp, Piper, and Windows/browser fallbacks.
 - Wake-word and voice activity gates for always-listening mode, with push-to-talk still available.

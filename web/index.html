@@ -9,6 +9,7 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/ultron-logo.png" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/crimson-mode.css" />
   </head>
   <body class="app-booting">
     <section id="startupSequence" class="startup-sequence" role="status" aria-live="polite" aria-label="ULTRON startup sequence">
@@ -94,6 +95,9 @@
     </button>
 
     <main class="shell">
+      <button id="crimsonToggle" class="crimson-toggle icon-button" type="button" aria-label="Activate Crimson mode" aria-pressed="false" title="Activate Crimson mode">
+        <i data-lucide="eclipse" aria-hidden="true"></i>
+      </button>
       <header class="topbar detail-panel">
         <div class="brand-lockup">
           <img class="brand-mark" src="/ultron-logo.png" alt="" aria-hidden="true" />
@@ -341,6 +345,10 @@
           </section>
 
           <section id="systemPanel" class="drawer-view" role="tabpanel" data-drawer-panel="system" hidden>
+            <div class="cinematic-settings">
+              <div><strong>Persona</strong><output id="crimsonStatus" aria-live="polite">Standard</output></div>
+              <label><input id="crimsonAutomatic" type="checkbox" checked /> Cinematic events</label>
+            </div>
             <section class="system-section" aria-label="Skills">
               <div class="section-heading">
                 <div><span class="section-kicker">Capabilities</span><strong>Skills</strong></div>

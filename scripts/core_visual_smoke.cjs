@@ -99,6 +99,13 @@ async function main() {
       metrics[`${width}x${height}`] = await capture(page, out, `${width}x${height}`);
     }
     await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.evaluate(() => window.harness.core.setCinematic({ core: 1, shell: 1 }));
+    await page.waitForTimeout(100);
+    metrics.crimson = await capture(page, out, "crimson");
+    const redPixels = PNG.sync.read(await page.locator("canvas").screenshot()).data;
+    let redCount = 0;
+    for (let i = 0; i < redPixels.length; i += 4) if (redPixels[i] > 65 && redPixels[i] > redPixels[i + 1] * 1.4) redCount++;
+    assert.ok(redCount > 3000, "Crimson must visibly change the rendered core");
     await page.waitForTimeout(2500);
     const still = await page.locator("canvas").screenshot();
     await page.waitForTimeout(500);

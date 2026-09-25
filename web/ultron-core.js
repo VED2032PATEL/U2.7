@@ -18,6 +18,7 @@ const STATES = {
   success: { color: 0x9effd4, energy: 1.35, speed: 0.25, aperture: 1.1 },
   error: { color: 0xff7c72, energy: 0.72, speed: 0, aperture: 0.84 },
 };
+const CRIMSON_SIGNALS = { listening: 0xff7897, thinking: 0xff603e, speaking: 0xff315b, confirmation: 0xffca75, error: 0xff8644, success: 0xffc5d1 };
 
 // Preserve the factory API used by older packaged desktop frontends.
 export function createArmillaryCore({ scene, camera, renderer }) {
@@ -101,14 +102,25 @@ export function createArmillaryCore({ scene, camera, renderer }) {
   assembly.add(progressRing);
   const sweep = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.6, 0, 0.94), new THREE.Vector3(0.6, 0, 0.94)]), new THREE.LineBasicMaterial({ color: 0xb7f4ff, transparent: true, opacity: 0.65 }));
   assembly.add(sweep);
+  const echoes = Array.from({ length: 3 }, () => {
+    const points = Array.from({ length: 129 }, (_, i) => new THREE.Vector3(Math.cos(i / 128 * TAU), Math.sin(i / 128 * TAU), 0));
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0x8affd0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    line.position.z = 0.55;
+    assembly.add(line);
+    return line;
+  });
 
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const pointer = new THREE.Vector2(), target = new THREE.Vector3();
   const color = new THREE.Color(STATES.idle.color), desiredColor = color.clone();
+  const crimson = new THREE.Color(0xff1749), shellColor = new THREE.Color(), screenCenter = new THREE.Vector3();
+  const baseIce = materials.ice.color.clone(), baseAmber = materials.amber.color.clone();
+  const packetColor = new THREE.Color();
   let layoutMode = "compact", fit = 1, disposed = false, activity = null, activityUntil = 0;
   let state = "idle", energy = 0.58, speed = 0.22, aperture = 1;
   let phase = 0, rotation = 0, previousTime = null, speechStart = 0;
   let speechStrength = 0.6, volume = 1, rate = 1, boot = 1, bootActive = false;
+  let cinematic = { core: 0, shell: 0, glitch: 0 }, lastKind = "idle", reaction = 0, lastPacketTint = -1;
   const onPointer = (event) => {
     if (event.pointerType === "touch") return;
     const rect = renderer.domElement.getBoundingClientRect();
@@ -146,6 +158,15 @@ export function createArmillaryCore({ scene, camera, renderer }) {
       rate = THREE.MathUtils.clamp(Number(profile.rate ?? 1), 0.5, 2);
     },
     setLayoutMode(mode) { layoutMode = mode; fitLayout(); },
+    setCinematic(value = {}) {
+      cinematic = Object.fromEntries(["core", "shell", "glitch"].map((key) => [key, THREE.MathUtils.clamp(Number(value[key]) || 0, 0, 1)]));
+    },
+    getScreenCenter() {
+      root.updateWorldMatrix(true, false);
+      screenCenter.setFromMatrixPosition(root.matrixWorld).project(camera);
+      const rect = renderer.domElement.getBoundingClientRect();
+      return { x: rect.left + (screenCenter.x + 1) * rect.width / 2, y: rect.top + (1 - screenCenter.y) * rect.height / 2 };
+    },
     update(time, nextState = state) {
       if (disposed) return;
       state = STATES[nextState] ? nextState : "idle";
@@ -161,17 +182,26 @@ export function createArmillaryCore({ scene, camera, renderer }) {
       aperture = THREE.MathUtils.lerp(aperture, profile.aperture, blend);
       if (!motion.matches && !document.hidden) { phase += dt; rotation += dt * speed; }
       const t = motion.matches ? 0 : phase;
+      if (kind !== lastKind) { reaction = 1; lastKind = kind; }
+      reaction = motion.matches ? 0 : Math.max(0, reaction - dt * 0.48);
       const speech = state === "speaking" && !motion.matches ? (0.5 + 0.3 * Math.sin((t - speechStart) * 9 * rate) + 0.2 * Math.sin((t - speechStart) * 17)) * speechStrength * volume : 0;
-      color.lerp(desiredColor.setHex(profile.color), blend);
+      crimson.setHex(CRIMSON_SIGNALS[kind] || 0xff1749);
+      color.lerp(desiredColor.setHex(profile.color).lerp(crimson, cinematic.core), blend);
+      crimson.setHex(0xff1749);
+      shellColor.setHex(profile.color).lerp(crimson, cinematic.shell);
       const reveal = bootActive ? THREE.MathUtils.smootherstep(boot, 0, 1) : 1;
       root.position.lerp(target, blend);
       root.scale.setScalar(fit * THREE.MathUtils.lerp(0.5, 1, reveal));
       root.visible = reveal > 0.002;
       assembly.rotation.x = THREE.MathUtils.lerp(assembly.rotation.x, 0.09 + (motion.matches ? 0 : pointer.y * 0.045), blend);
       assembly.rotation.y = THREE.MathUtils.lerp(assembly.rotation.y, -0.12 + (motion.matches ? 0 : pointer.x * 0.075), blend);
+      assembly.position.x = motion.matches ? 0 : cinematic.glitch * 0.035 * Math.sin(t * 12);
+      assembly.rotation.z = motion.matches ? 0 : cinematic.glitch * 0.018;
       housing.rotation.z = rotation * 0.15 + (1 - reveal) * 0.8;
       halo.rotation.z = -rotation * 0.09;
       gimbal.rotation.z = rotation * 0.19 + (1 - reveal) * 1.4;
+      gimbal.rotation.x = 0.3 + (motion.matches ? 0 : Math.sin(t * (kind === "thinking" ? 1.7 : 0.45)) * (kind === "thinking" ? 0.3 : 0.09));
+      gimbal.rotation.y = -0.24 + (motion.matches ? 0 : Math.cos(t * 0.7) * 0.12 * energy);
       iris.rotation.z = -rotation * 0.11;
       const shellReveal = THREE.MathUtils.smootherstep(boot, 0.22, 0.82);
       housing.scale.setScalar(0.75 + shellReveal * 0.25);
@@ -179,23 +209,48 @@ export function createArmillaryCore({ scene, camera, renderer }) {
       housing.visible = boot > 0.18;
       halo.visible = boot > 0.32;
       blades.forEach((blade, i) => {
-        const s = aperture + speech * 0.04;
+        const s = aperture + speech * 0.09 + reaction * 0.025 - cinematic.core * 0.035;
         blade.scale.set(s, s, 1);
-        blade.position.z = Math.sin(t * 0.5 + i * 0.52) * 0.018;
+        blade.position.z = Math.sin(t * (kind === "executing" ? 3 : 0.7) + i * 0.52) * (0.018 + reaction * 0.05);
       });
-      materials.mint.color.copy(color);
+      materials.mint.color.copy(shellColor);
+      materials.ice.color.copy(baseIce).lerp(crimson, cinematic.shell);
+      materials.amber.color.copy(baseAmber).lerp(crimson, cinematic.shell * 0.85);
+      materials.edge.color.setHex(0x88a5ae).lerp(crimson, cinematic.shell * 0.75);
+      materials.titanium.color.setHex(0x38505b).lerp(desiredColor.setHex(0x62323e), cinematic.shell);
+      materials.graphite.color.setHex(0x101c24).lerp(desiredColor.setHex(0x28111a), cinematic.shell);
+      materials.silver.color.setHex(0x6a848e).lerp(desiredColor.setHex(0x946270), cinematic.shell);
+      lights.children[2].color.setHex(0x5dffba).lerp(crimson, cinematic.shell);
       materials.mint.opacity = (0.55 + energy * 0.34) * reveal;
       materials.ice.opacity = (0.38 + energy * 0.34) * reveal;
       lens.uniforms.uTime.value = t;
-      lens.uniforms.uEnergy.value = energy + speech * 0.6;
+      lens.uniforms.uEnergy.value = energy + speech * 0.9 + reaction * 0.3;
+      lens.uniforms.uCrimson.value = cinematic.core;
       lens.uniforms.uColor.value.copy(color);
       lens.uniforms.uReveal.value = reveal;
-      lens.mesh.scale.setScalar(0.96 + speech * 0.055);
+      lens.mesh.scale.setScalar(0.96 + speech * 0.085 + reaction * 0.03);
       fibers.group.rotation.z = rotation * 0.08;
-      fibers.lines.forEach((line, i) => { line.material.opacity = reveal * (0.1 + energy * 0.14 + Math.pow(0.5 + 0.5 * Math.sin(t * 1.7 - i), 5) * 0.32); });
+      fibers.lines.forEach((line, i) => {
+        line.material.color.setHex(i % 4 === 0 ? 0xb8e9ff : 0x56dbb5).lerp(crimson, cinematic.core);
+        line.material.opacity = reveal * (0.1 + energy * 0.14 + Math.pow(0.5 + 0.5 * Math.sin(t * 1.7 - i), 5) * 0.32);
+      });
       updatePackets(packets, rotation, energy, reveal);
+      if (lastPacketTint !== cinematic.shell) {
+        for (let i = 0; i < packets.mesh.count; i++) packets.mesh.setColorAt(i, packetColor.setHex(i % 9 === 0 ? 0xf6cb85 : i % 3 === 0 ? 0xb0eeff : 0x72efc0).lerp(crimson, cinematic.shell));
+        packets.mesh.instanceColor.needsUpdate = true;
+        lastPacketTint = cinematic.shell;
+      }
       const amplitude = kind === "listening" ? 0.07 : kind === "media" ? 0.05 + Math.sin(t * 3) * 0.02 : 0.016 + speech * 0.075;
       updateWaveform(waveform, t, amplitude, color, reveal);
+      echoes.forEach((line, i) => {
+        const travel = (1 - reaction) * 1.6 - i * 0.2;
+        line.visible = !motion.matches && reaction > 0 && travel >= 0 && travel <= 1 && boot > 0.9;
+        line.scale.setScalar(0.7 + Math.max(0, travel) * 1.72);
+        line.material.color.copy(color);
+        line.material.opacity = Math.max(0, (1 - travel) * 0.4 * reveal);
+      });
+      progressRing.material.color.copy(shellColor);
+      sweep.material.color.copy(color);
       progressRing.visible = Number.isFinite(activity?.progress) && !["error", "paused"].includes(kind);
       if (progressRing.visible) progressRing.geometry.setDrawRange(0, Math.floor(THREE.MathUtils.clamp(activity.progress, 0, 1) * 128) + 1);
       sweep.visible = kind === "research" || kind === "vision" || kind === "transcribing";
@@ -249,7 +304,7 @@ function ticks(radius, count, short, long, material) {
   return new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), material);
 }
 function makeLens() {
-  const uniforms = { uTime: { value: 0 }, uEnergy: { value: 0.6 }, uReveal: { value: 1 }, uColor: { value: new THREE.Color(0x68f0c5) } };
+  const uniforms = { uTime: { value: 0 }, uEnergy: { value: 0.6 }, uReveal: { value: 1 }, uCrimson: { value: 0 }, uColor: { value: new THREE.Color(0x68f0c5) } };
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: `
@@ -268,6 +323,7 @@ function makeLens() {
       uniform float uTime;
       uniform float uEnergy;
       uniform float uReveal;
+      uniform float uCrimson;
       uniform vec3 uColor;
       varying vec3 vPosition;
       varying vec3 vNormal;
@@ -281,9 +337,11 @@ function makeLens() {
         float filaments = pow(0.5 + 0.5 * field, 9.0);
         float fine = pow(0.5 + 0.5 * sin(radius * 115.0 + angle * 3.0 - uTime * 2.0), 18.0);
         float nucleus = exp(-radius * radius * 18.0);
+        float pupil = smoothstep(0.025, 0.095, abs(p.x) + abs(p.y) * 0.16);
         float rim = pow(1.0 - facing, 2.0);
         vec3 color = uColor * (0.08 + filaments * 0.8 + fine * 0.2 + rim * 1.4);
         color += vec3(0.78, 0.95, 1.0) * nucleus * (1.2 + uEnergy * 0.65);
+        color *= mix(1.0, 0.08 + pupil * 0.92, uCrimson);
         color *= (0.5 + uEnergy * 0.7) * uReveal;
         gl_FragColor = vec4(color, 1.0);
         #include <tonemapping_fragment>

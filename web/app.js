@@ -1,6 +1,7 @@
 import * as THREE from "./vendor/three.module.min.js";
 import { createArmillaryCore } from "./ultron-core.js";
 import { createCoreActivityController } from "./core-activity.js";
+import { createCrimsonMode } from "./crimson-mode.js";
 import { createHandGestureController } from "./hand-gestures.js";
 import { createDesktopGestureInterpreter } from "./hand-mouse.js";
 import { createPhotoReliefModeler } from "./photo-modeler.js";
@@ -340,6 +341,13 @@ particles.visible = false;
 fill.intensity = 0;
 const armillaryCore = createArmillaryCore({ scene, camera, renderer });
 const coreActivity = createCoreActivityController(armillaryCore);
+const crimsonMode = createCrimsonMode(armillaryCore, {
+  eligible: () => document.body.classList.contains("app-ready")
+    && ["idle", "waiting_for_wake_word"].includes(visualState)
+    && ["idle", "waiting_for_wake_word"].includes(canvas.dataset.coreActivity)
+    && !pendingConfirmation,
+});
+window.addEventListener("beforeunload", () => crimsonMode.dispose());
 
 const agentWorkspace = createAgentWorkspace({
   onOpen: () => { setDetailsCollapsed(false); selectDrawerTab("agent"); },
@@ -2309,6 +2317,10 @@ async function playBrowserSpeech(text) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = providerStatus?.speech_settings?.rate || 1.08;
   utterance.pitch = providerStatus?.speech_settings?.pitch || 1.0;
+  if (crimsonMode.persona === "crimson") {
+    utterance.rate *= 0.98;
+    utterance.pitch *= 0.95;
+  }
   utterance.volume = providerStatus?.speech_settings?.volume || 1.0;
   const voices = await getBrowserVoices();
   const preferred = selectBrowserVoice(voices, providerStatus?.speech_settings?.voice_preference);
@@ -2369,6 +2381,8 @@ async function playNeuralSpeech(text, speech) {
   }
   const audio = new Audio(source);
   audio.preload = "auto";
+  audio.playbackRate = crimsonMode.persona === "crimson" ? 0.98 : 1;
+  audio.preservesPitch = true;
   audio.volume = Math.max(0, Math.min(1, Number(providerStatus?.speech_settings?.volume ?? 1)));
   currentSpeechAudio = audio;
   currentSpeechUrl = objectUrl;
@@ -3097,6 +3111,7 @@ async function fetchJson(url) {
 }
 
 async function postJson(url, payload) {
+  payload = { ...payload, persona: crimsonMode.persona };
   return coreActivity.run(url, async () => {
     const response = await fetch(url, {
       method: "POST",
@@ -3115,6 +3130,7 @@ function escapeHtml(value) {
 
 function animate() {
   const elapsed = clock.getElapsedTime();
+  crimsonMode.update(elapsed);
   const target = stateTargets[visualState];
   const pulse = 1 + Math.sin(elapsed * (visualState === "listening" ? 2.0 : 3.8)) * 0.018;
   const sphereScale = target.scale * pulse;

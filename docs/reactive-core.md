@@ -27,6 +27,8 @@ Motion is delta-time based, pauses when the page is hidden, and becomes static w
 
 ## Desktop update
 
+The [Crimson cinematic persona](crimson-mode.md) adds core-first transitions and Python conversation styling. Install that feature with a full desktop rebuild. The visual-only updater below only handles the original aperture/activity modules.
+
 New builds include these assets automatically through `ultron27.spec`. Existing supported PyInstaller packages can receive the visual update without replacing their Python backend:
 
 ```powershell

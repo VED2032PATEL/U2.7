@@ -111,7 +111,7 @@ class GroqChatProvider:
     model: str
     api_key: str | None = None
 
-    def complete_chat(self, messages: list[dict[str, str]], timeout: float, *, max_tokens: int = 180) -> str:
+    def complete_chat(self, messages: list[dict[str, str]], timeout: float, *, max_tokens: int = 180, reasoning_effort: str | None = None) -> str:
         key = self.api_key or get_secret("GROQ_API_KEY")
         if not key:
             raise LLMChatError("Groq API key is missing. Set GROQ_API_KEY.")
@@ -121,6 +121,9 @@ class GroqChatProvider:
             "max_tokens": max_tokens,
             "messages": messages,
         }
+        if reasoning_effort is not None and self.model in {"openai/gpt-oss-20b", "openai/gpt-oss-120b"}:
+            payload["reasoning_effort"] = reasoning_effort
+            payload["max_completion_tokens"] = payload.pop("max_tokens")
         request = urllib.request.Request(
             _chat_completions_url(self.endpoint),
             data=json.dumps(payload).encode("utf-8"),
